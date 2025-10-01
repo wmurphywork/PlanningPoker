@@ -53,22 +53,38 @@ export default function App() {
     await setDoc(ref, newRoom);
   }
 
-  async function revealCards() {
-    if (!room) return;
-    await updateDoc(doc(db, "rooms", room.id), { revealed: true });
-  }
+async function revealCards() {
+  if (!room) return;
+  await updateDoc(doc(db, "rooms", room.id), { revealed: true });
+}
 
-  async function resetRound() {
-    if (!room) return;
-    await updateDoc(doc(db, "rooms", room.id), {
-      revealed: false,
-      participants: {},
-    });
-  }
+
+async function resetRound() {
+  if (!room) return;
+  const ref = doc(db, "rooms", room.id);
+  const clearedParticipants = {};
+  Object.keys(room.participants || {}).forEach(p => {
+    clearedParticipants[p] = { lastSeen: new Date().toISOString() }; // vote cleared
+  });
+  await updateDoc(ref, { revealed: false, participants: clearedParticipants });
+}
+
+  async function setVote(vote) {
+  if (!room || !name) return;
+  const ref = doc(db, "rooms", room.id);
+  await setDoc(ref, {
+    participants: {
+      [name]: {
+        vote,
+        lastSeen: new Date().toISOString(),
+      }
+    }
+  }, { merge: true }); // merge ensures other users’ votes are not overwritten
+}
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">🃏 Planning Poker (Firebase)</h1>
+      <h1 className="text-2xl font-bold mb-4">Metrol Software Planning Poker</h1>
 
       {!room && (
         <div className="space-x-2">
@@ -97,10 +113,10 @@ export default function App() {
             onChange={(e) => setName(e.target.value)}
           />
           <div className="mt-4 space-x-2">
-            {[1, 2, 3, 4, 5].map((n) => (
+            {[1, 2, 3, 4, 5, "Skip" ].map((n) => (
               <button
                 key={n}
-                onClick={() => setCard(n)}
+                onClick={() => setVote(n)} // <-- call setVote here
                 className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
               >
                 {n}
@@ -111,20 +127,25 @@ export default function App() {
           <div className="mt-4">
             <h2 className="font-semibold">Participants</h2>
             <ul className="list-disc pl-6">
-              {room.participants && Object.entries(room.participants).map(([pName, p]) => (
-                <li key={pName}>
-                  {pName}: {room.revealed ? p.card : "❓"}
-                </li>
-              ))}
+              {room.participants &&
+                Object.entries(room.participants).map(([pName, p]) => (
+                  <li key={pName}>
+                    {pName}: {room.revealed || pName === name ? p.vote : "❓"}
+                  </li>
+                ))}
             </ul>
           </div>
 
           <div className="mt-4 space-x-2">
-            <button onClick={revealCards} className="px-4 py-2 bg-purple-500 text-white rounded">
+            <button onClick={revealCards} 
+              disabled={!name.toLowerCase().includes("driver")}
+              className="px-4 py-2 bg-purple-500 text-white rounded">
               Reveal
             </button>
-            <button onClick={resetRound} className="px-4 py-2 bg-red-500 text-white rounded">
-              Reset
+            <button onClick={resetRound} 
+             disabled={!name.toLowerCase().includes("driver")}
+             className="px-4 py-2 bg-red-500 text-white rounded">
+              Hide
             </button>
           </div>
         </div>
